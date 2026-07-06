@@ -35,9 +35,24 @@ def init_db():
                 )
             """)
             conn.commit()
+        update_trades_table()
         return True
     except Exception as e:
         print(f"init_db error: {e}")
+        return False
+
+
+def update_trades_table():
+    try:
+        with sqlite3.connect(config.DB_PATH) as conn:
+            existing = {row[1] for row in conn.execute("PRAGMA table_info(trades)")}
+            for column, col_type in (("close_price", "REAL"), ("pnl", "REAL"), ("close_reason", "TEXT")):
+                if column not in existing:
+                    conn.execute(f"ALTER TABLE trades ADD COLUMN {column} {col_type}")
+            conn.commit()
+        return True
+    except Exception as e:
+        print(f"update_trades_table error: {e}")
         return False
 
 
@@ -72,12 +87,12 @@ def log_trade(epic, direction, size, entry_price, stop_loss, take_profit, status
         return False
 
 
-def update_trade_status(deal_id, status):
+def update_trade_status(deal_id, status, close_price=None, pnl=None, close_reason=None):
     try:
         with sqlite3.connect(config.DB_PATH) as conn:
             conn.execute(
-                "UPDATE trades SET status = ? WHERE deal_id = ?",
-                (status, deal_id),
+                "UPDATE trades SET status = ?, close_price = ?, pnl = ?, close_reason = ? WHERE deal_id = ?",
+                (status, close_price, pnl, close_reason, deal_id),
             )
             conn.commit()
         return True

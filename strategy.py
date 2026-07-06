@@ -38,9 +38,9 @@ def generate_signal(df):
     crossed_up = prev["ema20"] <= prev["ema50"] and last["ema20"] > last["ema50"]
     crossed_down = prev["ema20"] >= prev["ema50"] and last["ema20"] < last["ema50"]
 
-    if crossed_up and 45 <= last["rsi"] <= 65:
+    if crossed_up and config.RSI_LONG_MIN <= last["rsi"] <= config.RSI_LONG_MAX:
         return "BUY"
-    if crossed_down and 35 <= last["rsi"] <= 55:
+    if crossed_down and config.RSI_SHORT_MIN <= last["rsi"] <= config.RSI_SHORT_MAX:
         return "SELL"
     return None
 
@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
     api = CapitalAPI()
     api.login()
-    candles = api.get_candles()
+    candles = api.get_candles(config.EPICS[0])
     df = candles_to_dataframe(candles)
     df = add_indicators(df)
     print(df[["time", "open", "high", "low", "close", "ema20", "ema50", "rsi", "atr"]].tail(3))

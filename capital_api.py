@@ -57,8 +57,7 @@ class CapitalAPI:
         account = next(a for a in accounts if a["accountId"] == self.account_id)
         return account["balance"]["balance"]
 
-    def get_candles(self, epic=None, resolution=None, max_candles=None):
-        epic = epic or config.EPIC
+    def get_candles(self, epic, resolution=None, max_candles=None):
         resolution = resolution or config.RESOLUTION
         max_candles = max_candles or config.CANDLE_COUNT
         return self._request(
@@ -70,8 +69,7 @@ class CapitalAPI:
     def get_open_positions(self):
         return self._request("GET", "/api/v1/positions")["positions"]
 
-    def place_order(self, direction, size, stop_level, profit_level, epic=None):
-        epic = epic or config.EPIC
+    def place_order(self, direction, size, stop_level, profit_level, epic):
         return self._request(
             "POST",
             "/api/v1/positions",
@@ -88,10 +86,20 @@ class CapitalAPI:
     def close_position(self, deal_id):
         return self._request("DELETE", f"/api/v1/positions/{deal_id}")
 
+    def get_confirmation(self, deal_reference):
+        return self._request("GET", f"/api/v1/confirms/{deal_reference}")
+
+    def get_deal_activity(self, deal_id):
+        return self._request(
+            "GET",
+            "/api/v1/history/activity",
+            params={"dealId": deal_id, "detailed": "true", "lastPeriod": 86400},
+        ).get("activities", [])
+
 
 if __name__ == "__main__":
     api = CapitalAPI()
     print("Logging in...")
     print(api.login())
     print("Balance:", api.get_balance())
-    print("Candles:", api.get_candles())
+    print("Candles:", api.get_candles(config.EPICS[0]))

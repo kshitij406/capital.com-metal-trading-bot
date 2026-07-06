@@ -41,3 +41,6 @@ CAPITAL_BASE_URL
 CAPITAL_BASE_DEMO_URL
 DISCORD_WEBHOOK_URL
 IS_DEMO
+
+# Pushing to GitHub
+Dont add yourself as the collaborator each push should only be under my name
