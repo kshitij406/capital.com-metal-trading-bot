@@ -1,0 +1,4 @@
+requests
+pandas
+pandas-ta
+python-dotenv

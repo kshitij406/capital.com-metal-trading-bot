@@ -1,0 +1,97 @@
+import requests
+
+import config
+
+SESSION_URL = "/api/v1/session"
+
+
+class CapitalAPI:
+    def __init__(self):
+        self.base_url = config.CAPITAL_BASE_URL.rstrip("/")
+        self.cst = None
+        self.security_token = None
+        self.account_id = None
+
+    def _headers(self):
+        return {
+            "X-CAP-API-KEY": config.CAPITAL_API_KEY,
+            "Content-Type": "application/json",
+            "CST": self.cst or "",
+            "X-SECURITY-TOKEN": self.security_token or "",
+        }
+
+    def login(self):
+        resp = requests.post(
+            f"{self.base_url}/api/v1/session",
+            headers={
+                "X-CAP-API-KEY": config.CAPITAL_API_KEY,
+                "Content-Type": "application/json",
+            },
+            json={
+                "identifier": config.CAPITAL_EMAIL,
+                "password": config.CAPITAL_PASSWORD,
+                "encryptedPassword": False,
+            },
+        )
+        resp.raise_for_status()
+        self.cst = resp.headers["CST"]
+        self.security_token = resp.headers["X-SECURITY-TOKEN"]
+        self.account_id = self.get_accounts()[0]["accountId"]
+        return resp.json()
+
+    def _request(self, method, path, **kwargs):
+        resp = requests.request(method, f"{self.base_url}{path}", headers=self._headers(), **kwargs)
+        if resp.status_code == 401:
+            self.login()
+            resp = requests.request(method, f"{self.base_url}{path}", headers=self._headers(), **kwargs)
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_accounts(self):
+        resp = requests.get(f"{self.base_url}/api/v1/accounts", headers=self._headers())
+        resp.raise_for_status()
+        return resp.json()["accounts"]
+
+    def get_balance(self):
+        accounts = self.get_accounts()
+        account = next(a for a in accounts if a["accountId"] == self.account_id)
+        return account["balance"]["balance"]
+
+    def get_candles(self, epic=None, resolution=None, max_candles=None):
+        epic = epic or config.EPIC
+        resolution = resolution or config.RESOLUTION
+        max_candles = max_candles or config.CANDLE_COUNT
+        return self._request(
+            "GET",
+            f"/api/v1/prices/{epic}",
+            params={"resolution": resolution, "max": max_candles},
+        )
+
+    def get_open_positions(self):
+        return self._request("GET", "/api/v1/positions")["positions"]
+
+    def place_order(self, direction, size, stop_level, profit_level, epic=None):
+        epic = epic or config.EPIC
+        return self._request(
+            "POST",
+            "/api/v1/positions",
+            json={
+                "epic": epic,
+                "direction": direction,
+                "size": size,
+                "guaranteedStop": False,
+                "stopLevel": stop_level,
+                "profitLevel": profit_level,
+            },
+        )
+
+    def close_position(self, deal_id):
+        return self._request("DELETE", f"/api/v1/positions/{deal_id}")
+
+
+if __name__ == "__main__":
+    api = CapitalAPI()
+    print("Logging in...")
+    print(api.login())
+    print("Balance:", api.get_balance())
+    print("Candles:", api.get_candles())
