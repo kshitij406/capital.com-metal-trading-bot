@@ -62,10 +62,10 @@ def format_daily_summary(data):
 
 def send_daily_summary_if_due(stats_data):
     now = datetime.now(timezone.utc)
-    # ponytail: gated on minute == 0 instead of a last-sent-date file, since the
-    # cron schedule always lands on :00/:15/:30/:45 - add a state file if the
-    # schedule ever runs off that grid.
-    if now.hour == config.DAILY_SUMMARY_HOUR_UTC and now.minute == 0:
+    # ponytail: gated on "first cron slot of the hour" instead of a last-sent-date
+    # file, since the schedule always lands on the same 4 minutes each hour - add
+    # a state file if the schedule ever runs off that grid.
+    if now.hour == config.DAILY_SUMMARY_HOUR_UTC and now.minute < 15:
         notify_discord(format_daily_summary(stats_data))
 
 
