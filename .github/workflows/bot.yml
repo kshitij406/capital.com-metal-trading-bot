@@ -33,6 +33,8 @@ jobs:
           CAPITAL_BASE_DEMO_URL: ${{ secrets.CAPITAL_BASE_DEMO_URL }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           IS_DEMO: ${{ secrets.IS_DEMO }}
+          GITHUB_USERNAME: kshitij406
+          GITHUB_REPO: capital.com-metal-trading-bot
 
       - name: Persist trades.db and stats.json
         run: |

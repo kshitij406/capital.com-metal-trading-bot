@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from datetime import datetime, timezone
 
@@ -69,6 +70,18 @@ def send_daily_summary_if_due(stats_data):
     # a state file if the schedule ever runs off that grid.
     if now.hour == config.DAILY_SUMMARY_HOUR_UTC and now.minute < 15:
         notify_discord(format_daily_summary(stats_data))
+
+
+def is_paused():
+    username = os.environ.get("GITHUB_USERNAME")
+    repo = os.environ.get("GITHUB_REPO")
+    if not username or not repo:
+        return False
+    try:
+        resp = requests.get(f"https://api.github.com/repos/{username}/{repo}/contents/PAUSED", timeout=10)
+        return resp.status_code == 200
+    except Exception:
+        return False
 
 
 def get_total_pnl():
@@ -207,6 +220,10 @@ def run_epic_cycle(api, epic):
 
 
 def run_cycle():
+    if is_paused():
+        print("Bot is paused. Skipping cycle.")
+        return
+
     api = CapitalAPI()
 
     try:
