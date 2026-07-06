@@ -1,6 +1,6 @@
 # capital.com-metal-trading-bot
 
-Gold/Silver/Copper CFD trading bot using the Capital.com REST API. Runs hourly (currently every 15 min for demo testing) via GitHub Actions.
+Gold/Silver/Copper CFD trading bot using the Capital.com REST API. Runs every 15 min (demo testing) via GitHub Actions.
 
 ## Strategy
 
@@ -42,7 +42,9 @@ See `.env.example`:
 
 ## Scheduling
 
-`.github/workflows/bot.yml` runs `bot.py` on a cron schedule via GitHub Actions, loading credentials from repo secrets.
+`.github/workflows/bot.yml` triggers on `workflow_dispatch` only (GitHub's native `schedule:` cron was dropped — it never reliably fired over a 2+ hour test window). Runs are instead triggered externally by a cron-job.org job (id `8018835`) that POSTs to the GitHub Actions dispatch endpoint every 15 minutes, offset to `:03/:18/:33/:48` UTC to avoid GitHub's documented peak-load delays at `:00/:15/:30/:45`.
+
+The workflow persists `trades.db` and `stats.json` back to the repo at the end of each run so state survives across ephemeral runners.
 
 ## Stats
 
