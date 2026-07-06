@@ -22,6 +22,7 @@ Gold/Silver/Copper CFD trading bot using the Capital.com REST API. Runs every 15
 - `logger.py` - SQLite logging (`trades.db`)
 - `stats.py` - recalculates `stats.json` from `trades.db` after every cycle
 - `bot.py` - wires everything together, main entry point
+- `discord_bot.py` - Discord slash-command bot for stats/control (see below)
 
 ## Setup
 
@@ -44,8 +45,27 @@ See `.env.example`:
 
 `.github/workflows/bot.yml` triggers on `workflow_dispatch` only (GitHub's native `schedule:` cron was dropped — it never reliably fired over a 2+ hour test window). Runs are instead triggered externally by a cron-job.org job (id `8018835`) that POSTs to the GitHub Actions dispatch endpoint every 15 minutes, offset to `:03/:18/:33/:48` UTC to avoid GitHub's documented peak-load delays at `:00/:15/:30/:45`.
 
-The workflow persists `trades.db` and `stats.json` back to the repo at the end of each run so state survives across ephemeral runners.
+The workflow persists `trades.db` and `stats.json` back to the repo at the end of each run so state survives across ephemeral runners. The persist step rebases against `main` before pushing (with one retry) to avoid failing when two runs' commits land close together.
 
 ## Stats
 
-`stats.json` is regenerated at the end of every cycle from closed trades in `trades.db`: win rate, PnL, expectancy, drawdown, streak, both overall and per epic. It's runtime output, not committed (see `.gitignore`).
+`stats.json` is regenerated at the end of every cycle from closed trades in `trades.db`: win rate, PnL, expectancy, drawdown, streak, both overall and per epic. Both files are listed in `.gitignore` but force-committed (`git add -f`) by the persist step so they survive across ephemeral GitHub Actions runners.
+
+## Discord bot
+
+`discord_bot.py` is a separate always-on process (not the GitHub Actions bot) providing 17 slash commands over Discord:
+
+- **Stats**: `/profits`, `/status`, `/balance`, `/winstreak`, `/bestday`, `/worstday`, `/breakdown`, `/expectancy`, `/drawdown`, `/gold`, `/silver`, `/copper`, `/roast`
+- **Live price**: `/price <metal>` - live bid/ask/mid from the Capital.com API
+- **Control**: `/pause` and `/resume` - toggle a `PAUSED` file in the repo via the GitHub Contents API; `bot.py` checks for it at the start of each cycle and skips new entries while it exists (open positions are still managed by Capital.com's own SL/TP)
+- **Control**: `/forcecycle` - fires a `workflow_dispatch` against `bot.yml` to run a cycle immediately
+- `/help` - lists all commands
+
+Stats are read from `stats.json` via the raw GitHub content URL (`GITHUB_USERNAME`/`GITHUB_REPO`), not a live connection to the trading bot process.
+
+### Deploying the Discord bot (Railway)
+
+The Discord bot needs a long-running process, unlike `bot.py` which runs as a scheduled GitHub Actions job. It's deployed on Railway using the `Procfile` (`worker: python discord_bot.py`). Set the same Capital.com/Discord env vars as the trading bot, plus:
+
+- `DISCORD_BOT_TOKEN`
+- `GITHUB_USERNAME`, `GITHUB_REPO`, `GITHUB_ACCESS_TOKEN` (fine-grained PAT, Contents + Actions read/write - used for `/pause`, `/resume`, `/forcecycle`)
