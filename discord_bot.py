@@ -420,6 +420,13 @@ async def roast(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
+@tree.command(name="help", description="List all available commands")
+async def help_command(interaction: discord.Interaction):
+    lines = [f"/{cmd.name} — {cmd.description}" for cmd in sorted(tree.get_commands(), key=lambda c: c.name)]
+    embed = discord.Embed(title="Available Commands", description="\n".join(lines), color=0x808080)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 @client.event
 async def on_ready():
     await tree.sync()
