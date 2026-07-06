@@ -85,19 +85,25 @@ def determine_close_reason(close_price, stop_loss, take_profit):
     return "MANUAL"
 
 
+CLOSE_PRICE_MAX_DEVIATION = 0.10
+
+
 def fetch_close_details(api, deal_id, direction, size, entry_price, fallback_price):
     close_price = None
     try:
         for activity in api.get_deal_activity(deal_id):
             level = activity.get("details", {}).get("level")
-            if level is not None:
+            if level is not None and level > 0:
                 close_price = level
                 break
     except Exception:
         pass
 
-    if close_price is None:
+    if not close_price:
         close_price = fallback_price
+
+    if not close_price:
+        return None, None
 
     if direction == "LONG":
         pnl = (close_price - entry_price) * size
@@ -105,6 +111,12 @@ def fetch_close_details(api, deal_id, direction, size, entry_price, fallback_pri
         pnl = (entry_price - close_price) * size
 
     return round(close_price, 2), round(pnl, 2)
+
+
+def is_valid_close_price(close_price, entry_price):
+    if not close_price or close_price <= 0:
+        return False
+    return abs(close_price - entry_price) / entry_price <= CLOSE_PRICE_MAX_DEVIATION
 
 
 def check_closed_trades(api, epic, positions, current_close_price):
@@ -122,6 +134,11 @@ def check_closed_trades(api, epic, positions, current_close_price):
             continue
 
         close_price, pnl = fetch_close_details(api, deal_id, direction, size, entry_price, current_close_price)
+
+        if not is_valid_close_price(close_price, entry_price):
+            print(f"WARNING: skipping close for {epic} deal {deal_id}, invalid close_price={close_price} (entry={entry_price})")
+            continue
+
         close_reason = determine_close_reason(close_price, stop_loss, take_profit)
 
         logger.update_trade_status(deal_id, "CLOSED", close_price=close_price, pnl=pnl, close_reason=close_reason)
