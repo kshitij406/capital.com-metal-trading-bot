@@ -16,7 +16,9 @@ CLOSE_TOLERANCE = 0.5
 
 def notify_discord(message):
     try:
-        requests.post(config.DISCORD_WEBHOOK_URL, json={"content": message})
+        resp = requests.post(config.DISCORD_WEBHOOK_URL, json={"content": message})
+        if resp.status_code >= 300:
+            print(f"notify_discord error: {resp.status_code} {resp.text}")
     except Exception as e:
         print(f"notify_discord error: {e}")
 
@@ -125,10 +127,12 @@ def check_closed_trades(api, epic, positions, current_close_price):
         logger.update_trade_status(deal_id, "CLOSED", close_price=close_price, pnl=pnl, close_reason=close_reason)
 
         running_total = get_total_pnl()
+        balance = api.get_balance()
         notify_discord(
             f"{epic} {direction} closed [{close_reason}]\n"
             f"PnL: {'+' if pnl >= 0 else ''}${pnl:.2f}\n"
-            f"Running total: {'+' if running_total >= 0 else ''}${running_total:.2f}"
+            f"Running total: {'+' if running_total >= 0 else ''}${running_total:.2f}\n"
+            f"Account balance: ${balance:.2f}"
         )
 
 
