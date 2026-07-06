@@ -64,9 +64,10 @@ def signed(v):
 
 @tree.command(name="profits", description="Show full trading stats")
 async def profits(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     data = fetch_stats()
     if data is None:
-        await interaction.response.send_message(STATS_UNAVAILABLE, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE, ephemeral=True)
         return
 
     overall = data["overall"]
@@ -93,18 +94,19 @@ async def profits(interaction: discord.Interaction):
 
     embed.set_footer(text=f"Last updated: {time_ago(data['last_updated'])}")
 
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 @tree.command(name="status", description="Quick one-line bot status")
 async def status(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     data = fetch_stats()
     if data is None:
-        await interaction.response.send_message(STATS_UNAVAILABLE, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE, ephemeral=True)
         return
 
     overall = data["overall"]
-    await interaction.response.send_message(
+    await interaction.followup.send(
         f"Bot running. {overall['total_trades']} trades, {overall['win_rate']}% win rate, "
         f"PnL: {signed(overall['total_pnl'])}. Last cycle: {time_ago(data['last_updated'])}.",
         ephemeral=True,
@@ -113,13 +115,14 @@ async def status(interaction: discord.Interaction):
 
 @tree.command(name="balance", description="Quick PnL and open trade check")
 async def balance(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     data = fetch_stats()
     if data is None:
-        await interaction.response.send_message(STATS_UNAVAILABLE, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE, ephemeral=True)
         return
 
     overall = data["overall"]
-    await interaction.response.send_message(
+    await interaction.followup.send(
         f"PnL: {signed(overall['total_pnl'])} | Open trades: {overall['open_trades']}",
         ephemeral=True,
     )
@@ -127,9 +130,10 @@ async def balance(interaction: discord.Interaction):
 
 @tree.command(name="winstreak", description="Show current win/loss streak")
 async def winstreak(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     data = fetch_stats()
     if data is None:
-        await interaction.response.send_message(STATS_UNAVAILABLE_SHORT, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE_SHORT, ephemeral=True)
         return
 
     overall = data["overall"]
@@ -145,45 +149,48 @@ async def winstreak(interaction: discord.Interaction):
     )
     embed.add_field(name="Overall win rate", value=f"{overall['win_rate']}%", inline=False)
 
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 @tree.command(name="bestday", description="Show the best single trade")
 async def bestday(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     data = fetch_stats()
     if data is None:
-        await interaction.response.send_message(STATS_UNAVAILABLE_SHORT, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE_SHORT, ephemeral=True)
         return
 
     best = data["overall"]["best_trade"]
     embed = discord.Embed(description=f"Best single trade: {signed(best)}", color=0x00FF00)
     embed.set_footer(text="Per-day breakdown not yet tracked. This shows best single trade.")
 
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 @tree.command(name="worstday", description="Show the worst single trade")
 async def worstday(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     data = fetch_stats()
     if data is None:
-        await interaction.response.send_message(STATS_UNAVAILABLE_SHORT, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE_SHORT, ephemeral=True)
         return
 
     worst = data["overall"]["worst_trade"]
     embed = discord.Embed(description=f"Worst single trade: {signed(worst)}", color=0xFF0000)
     embed.set_footer(text="Per-day breakdown not yet tracked. This shows worst single trade.")
 
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 @tree.command(name="breakdown", description="Show individual trade history info")
 async def breakdown(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     data = fetch_stats()
     if data is None:
-        await interaction.response.send_message(STATS_UNAVAILABLE_SHORT, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE_SHORT, ephemeral=True)
         return
 
-    await interaction.response.send_message(
+    await interaction.followup.send(
         "Individual trade history is stored in trades.db on the GitHub Actions runner. "
         "To view it, go to your repo > Actions > most recent run > download the trades.db artifact.\n"
         "Note: this is a known limitation. Individual trade log export can be added as a future feature.",
@@ -193,9 +200,10 @@ async def breakdown(interaction: discord.Interaction):
 
 @tree.command(name="expectancy", description="Show expectancy per trade")
 async def expectancy(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     data = fetch_stats()
     if data is None:
-        await interaction.response.send_message(STATS_UNAVAILABLE_SHORT, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE_SHORT, ephemeral=True)
         return
 
     overall = data["overall"]
@@ -213,14 +221,15 @@ async def expectancy(interaction: discord.Interaction):
 
     embed = discord.Embed(description=f"Expectancy: {signed(exp)} per trade\n{explanation}", color=color)
 
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 @tree.command(name="drawdown", description="Show max drawdown and risk context")
 async def drawdown(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     data = fetch_stats()
     if data is None:
-        await interaction.response.send_message(STATS_UNAVAILABLE_SHORT, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE_SHORT, ephemeral=True)
         return
 
     dd = data["overall"]["max_drawdown"]
@@ -235,15 +244,16 @@ async def drawdown(interaction: discord.Interaction):
 
     embed = discord.Embed(description=f"Max drawdown: -${abs(dd):.2f}\n{context}", color=color)
 
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 @tree.command(name="price", description="Show live bid/ask/mid price for a metal")
 @app_commands.describe(metal="gold, silver, or copper")
 async def price(interaction: discord.Interaction, metal: str):
+    await interaction.response.defer(ephemeral=True)
     epic = metal.strip().upper()
     if epic not in ("GOLD", "SILVER", "COPPER"):
-        await interaction.response.send_message("metal must be gold, silver, or copper", ephemeral=True)
+        await interaction.followup.send("metal must be gold, silver, or copper", ephemeral=True)
         return
 
     try:
@@ -254,7 +264,7 @@ async def price(interaction: discord.Interaction, metal: str):
         ask = candle["closePrice"]["ask"]
         ts = candle["snapshotTimeUTC"]
     except Exception:
-        await interaction.response.send_message("Could not connect to Capital.com API.", ephemeral=True)
+        await interaction.followup.send("Could not connect to Capital.com API.", ephemeral=True)
         return
 
     mid = (bid + ask) / 2
@@ -266,7 +276,7 @@ async def price(interaction: discord.Interaction, metal: str):
         color=0x808080,
     )
 
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 def _epic_embed(data, epic, color):
@@ -283,33 +293,37 @@ def _epic_embed(data, epic, color):
 
 @tree.command(name="gold", description="Show GOLD stats")
 async def gold(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     data = fetch_stats()
     if data is None:
-        await interaction.response.send_message(STATS_UNAVAILABLE_SHORT, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE_SHORT, ephemeral=True)
         return
-    await interaction.response.send_message(embed=_epic_embed(data, "GOLD", 0xFFD700), ephemeral=True)
+    await interaction.followup.send(embed=_epic_embed(data, "GOLD", 0xFFD700), ephemeral=True)
 
 
 @tree.command(name="silver", description="Show SILVER stats")
 async def silver(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     data = fetch_stats()
     if data is None:
-        await interaction.response.send_message(STATS_UNAVAILABLE_SHORT, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE_SHORT, ephemeral=True)
         return
-    await interaction.response.send_message(embed=_epic_embed(data, "SILVER", 0xC0C0C0), ephemeral=True)
+    await interaction.followup.send(embed=_epic_embed(data, "SILVER", 0xC0C0C0), ephemeral=True)
 
 
 @tree.command(name="copper", description="Show COPPER stats")
 async def copper(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     data = fetch_stats()
     if data is None:
-        await interaction.response.send_message(STATS_UNAVAILABLE_SHORT, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE_SHORT, ephemeral=True)
         return
-    await interaction.response.send_message(embed=_epic_embed(data, "COPPER", 0xB87333), ephemeral=True)
+    await interaction.followup.send(embed=_epic_embed(data, "COPPER", 0xB87333), ephemeral=True)
 
 
 @tree.command(name="pause", description="Pause the trading bot (no new entries)")
 async def pause(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     try:
         content = base64.b64encode(b"paused").decode()
         resp = requests.put(
@@ -320,7 +334,7 @@ async def pause(interaction: discord.Interaction):
         )
         resp.raise_for_status()
     except Exception:
-        await interaction.response.send_message(STATS_UNAVAILABLE_SHORT, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE_SHORT, ephemeral=True)
         return
 
     embed = discord.Embed(
@@ -331,11 +345,12 @@ async def pause(interaction: discord.Interaction):
         ),
         color=0xFF8C00,
     )
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 @tree.command(name="resume", description="Resume the trading bot")
 async def resume(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     try:
         get_resp = requests.get(f"{GITHUB_API_BASE}/contents/PAUSED", headers=GITHUB_HEADERS, timeout=10)
         if get_resp.status_code != 404:
@@ -349,15 +364,16 @@ async def resume(interaction: discord.Interaction):
             )
             del_resp.raise_for_status()
     except Exception:
-        await interaction.response.send_message(STATS_UNAVAILABLE_SHORT, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE_SHORT, ephemeral=True)
         return
 
     embed = discord.Embed(description="Bot resumed. New trades will open on next signal.", color=0x00FF00)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 @tree.command(name="forcecycle", description="Manually trigger a bot cycle now")
 async def forcecycle(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     try:
         resp = requests.post(
             f"{GITHUB_API_BASE}/actions/workflows/bot.yml/dispatches",
@@ -367,18 +383,19 @@ async def forcecycle(interaction: discord.Interaction):
         )
         resp.raise_for_status()
     except Exception:
-        await interaction.response.send_message(STATS_UNAVAILABLE_SHORT, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE_SHORT, ephemeral=True)
         return
 
     embed = discord.Embed(description="Manual cycle triggered. Check GitHub Actions in ~30 seconds.", color=0x0000FF)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 @tree.command(name="roast", description="Get roasted based on your trading stats")
 async def roast(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     data = fetch_stats()
     if data is None:
-        await interaction.response.send_message(STATS_UNAVAILABLE_SHORT, ephemeral=True)
+        await interaction.followup.send(STATS_UNAVAILABLE_SHORT, ephemeral=True)
         return
 
     overall = data["overall"]
@@ -417,14 +434,15 @@ async def roast(interaction: discord.Interaction):
         lines.append("Not enough drama in your stats to roast yet. Boringly average.")
 
     embed = discord.Embed(description="\n".join(lines), color=0x800080)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 @tree.command(name="help", description="List all available commands")
 async def help_command(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     lines = [f"/{cmd.name} — {cmd.description}" for cmd in sorted(tree.get_commands(), key=lambda c: c.name)]
     embed = discord.Embed(title="Available Commands", description="\n".join(lines), color=0x808080)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 @client.event
