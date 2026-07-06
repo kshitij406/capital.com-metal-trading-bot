@@ -2,11 +2,18 @@ import math
 
 import config
 
+MAX_UNITS = 50
+MIN_ATR = 0.01
+
 
 def calculate_trade(account_balance, entry_price, atr, direction):
+    if atr < MIN_ATR:
+        raise ValueError(f"ATR too small for safe position sizing: {atr}")
+
     risk_amount = account_balance * config.RISK_PER_TRADE
     sl_distance = atr * config.SL_ATR_MULT
     size = math.floor((risk_amount / sl_distance) * 100) / 100
+    size = min(size, MAX_UNITS)
 
     if direction == "LONG":
         stop_loss = entry_price - sl_distance

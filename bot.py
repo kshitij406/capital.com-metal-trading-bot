@@ -90,12 +90,17 @@ def get_total_pnl():
     return total or 0
 
 
-def determine_close_reason(close_price, stop_loss, take_profit):
-    if take_profit is not None and abs(close_price - take_profit) <= CLOSE_TOLERANCE:
-        return "TP"
-    if stop_loss is not None and abs(close_price - stop_loss) <= CLOSE_TOLERANCE:
-        return "SL"
-    return "MANUAL"
+def determine_close_reason(close_price, entry_price, direction, stop_loss, take_profit):
+    if close_price == entry_price:
+        if take_profit is not None and abs(close_price - take_profit) <= CLOSE_TOLERANCE:
+            return "TP"
+        if stop_loss is not None and abs(close_price - stop_loss) <= CLOSE_TOLERANCE:
+            return "SL"
+        return "MANUAL"
+
+    if direction == "LONG":
+        return "SL" if close_price < entry_price else "TP"
+    return "SL" if close_price > entry_price else "TP"
 
 
 CLOSE_PRICE_MAX_DEVIATION = 0.10
@@ -152,7 +157,7 @@ def check_closed_trades(api, epic, positions, current_close_price):
             print(f"WARNING: skipping close for {epic} deal {deal_id}, invalid close_price={close_price} (entry={entry_price})")
             continue
 
-        close_reason = determine_close_reason(close_price, stop_loss, take_profit)
+        close_reason = determine_close_reason(close_price, entry_price, direction, stop_loss, take_profit)
 
         logger.update_trade_status(deal_id, "CLOSED", close_price=close_price, pnl=pnl, close_reason=close_reason)
 
