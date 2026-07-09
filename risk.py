@@ -3,12 +3,16 @@ import math
 import config
 
 MAX_UNITS = 50
-MIN_ATR = 0.01
+MIN_ATR_PCT = 0.0005  # ATR must be at least 0.05% of entry_price - a fixed absolute
+                      # floor doesn't work across instruments at very different price
+                      # scales (e.g. GOLD ~4100 vs COPPER ~6.2), so this is expressed
+                      # relative to price instead.
 
 
 def calculate_trade(account_balance, entry_price, atr, direction):
-    if atr < MIN_ATR:
-        raise ValueError(f"ATR too small for safe position sizing: {atr}")
+    min_atr = entry_price * MIN_ATR_PCT
+    if atr < min_atr:
+        raise ValueError(f"ATR too small for safe position sizing: {atr} (min {min_atr:.6f})")
 
     risk_amount = account_balance * config.RISK_PER_TRADE
     sl_distance = atr * config.SL_ATR_MULT
