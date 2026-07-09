@@ -131,10 +131,49 @@ def fetch_close_details(api, deal_id, direction, size, entry_price, fallback_pri
     return round(close_price, 2), round(pnl, 2)
 
 
-def is_valid_close_price(close_price, entry_price):
-    if not close_price or close_price <= 0:
+def is_valid_price(candidate, reference):
+    if not candidate or candidate <= 0:
         return False
-    return abs(close_price - entry_price) / entry_price <= CLOSE_PRICE_MAX_DEVIATION
+    return abs(candidate - reference) / reference <= CLOSE_PRICE_MAX_DEVIATION
+
+
+RECONCILIATION_TOLERANCE = 0.05
+
+
+def fetch_reported_pnl(api, deal_id):
+    """Cross-check our computed pnl against Capital.com's own realized-pnl figure for
+    the same deal, sourced from /history/transactions. On that endpoint a closed TRADE
+    transaction's "size" field is actually the realized PnL amount (verified empirically:
+    it reconciles exactly against the Analytics dashboard), not a position size."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    try:
+        txs = api.get_transactions(f"{today}T00:00:00", f"{today}T23:59:59", tx_type="TRADE")
+    except Exception:
+        return None
+    for tx in txs:
+        if tx.get("dealId") == deal_id and tx.get("note") == "Trade closed":
+            try:
+                return float(tx["size"])
+            except (KeyError, ValueError, TypeError):
+                return None
+    return None
+
+
+def resolve_opened_position(api, epic, estimated_entry_price):
+    """The /confirms response's top-level dealId is the working order's id, not the
+    resulting position's id, and its affectedDeals array (meant to disambiguate this)
+    comes back empty in practice. Using it as deal_id breaks every later
+    get_deal_activity(deal_id) lookup for this trade's close, since that activity is
+    filed under the position's own id. Look the freshly opened position up directly
+    from /positions instead, so deal_id and entry_price both reflect the real fill."""
+    for p in api.get_open_positions():
+        if p["market"]["epic"] == epic:
+            level = p["position"]["level"]
+            if is_valid_price(level, estimated_entry_price):
+                return p["position"]["dealId"], level
+            print(f"WARNING: live fill level {level} for {epic} deviates >10% from estimate {estimated_entry_price}, discarding.")
+            break
+    return None, None
 
 
 def check_closed_trades(api, epic, positions, current_close_price):
@@ -153,13 +192,18 @@ def check_closed_trades(api, epic, positions, current_close_price):
 
         close_price, pnl = fetch_close_details(api, deal_id, direction, size, entry_price, current_close_price)
 
-        if not is_valid_close_price(close_price, entry_price):
+        if not is_valid_price(close_price, entry_price):
             print(f"WARNING: skipping close for {epic} deal {deal_id}, invalid close_price={close_price} (entry={entry_price})")
             continue
 
         close_reason = determine_close_reason(close_price, entry_price, direction, stop_loss, take_profit)
 
         logger.update_trade_status(deal_id, "CLOSED", close_price=close_price, pnl=pnl, close_reason=close_reason)
+
+        reported_pnl = fetch_reported_pnl(api, deal_id)
+        if reported_pnl is not None and abs(pnl - reported_pnl) > RECONCILIATION_TOLERANCE:
+            print(f"WARNING: PnL reconciliation mismatch for {epic} deal {deal_id}: "
+                  f"bot={pnl} capital.com={reported_pnl} diff={round(pnl - reported_pnl, 2)}")
 
         running_total = get_total_pnl()
         balance = api.get_balance()
@@ -209,7 +253,16 @@ def run_epic_cycle(api, epic):
             epic=epic,
         )
         confirmation = api.get_confirmation(result["dealReference"])
-        deal_id = confirmation.get("dealId", result.get("dealReference"))
+        if confirmation.get("dealStatus") != "ACCEPTED":
+            raise RuntimeError(f"Order not accepted for {epic}: {confirmation}")
+
+        resolved_deal_id, resolved_entry_price = resolve_opened_position(api, epic, entry_price)
+        if resolved_deal_id:
+            deal_id, entry_price = resolved_deal_id, resolved_entry_price
+        else:
+            deal_id = confirmation.get("dealId", result.get("dealReference"))
+            print(f"WARNING: could not confirm live position for {epic} after order placement; "
+                  f"logging estimated entry_price and order-level deal_id as a fallback.")
 
         logger.log_trade(
             epic, direction, trade["size"], entry_price,

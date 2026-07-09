@@ -57,14 +57,15 @@ class CapitalAPI:
         account = next(a for a in accounts if a["accountId"] == self.account_id)
         return account["balance"]["balance"]
 
-    def get_candles(self, epic, resolution=None, max_candles=None):
+    def get_candles(self, epic, resolution=None, max_candles=None, from_date=None, to_date=None):
         resolution = resolution or config.RESOLUTION
         max_candles = max_candles or config.CANDLE_COUNT
-        return self._request(
-            "GET",
-            f"/api/v1/prices/{epic}",
-            params={"resolution": resolution, "max": max_candles},
-        )
+        params = {"resolution": resolution, "max": max_candles}
+        if from_date:
+            params["from"] = from_date
+        if to_date:
+            params["to"] = to_date
+        return self._request("GET", f"/api/v1/prices/{epic}", params=params)
 
     def get_open_positions(self):
         return self._request("GET", "/api/v1/positions")["positions"]
@@ -95,6 +96,12 @@ class CapitalAPI:
             "/api/v1/history/activity",
             params={"dealId": deal_id, "detailed": "true", "lastPeriod": 86400},
         ).get("activities", [])
+
+    def get_transactions(self, from_date, to_date, tx_type=None):
+        params = {"from": from_date, "to": to_date}
+        if tx_type:
+            params["type"] = tx_type
+        return self._request("GET", "/api/v1/history/transactions", params=params).get("transactions", [])
 
 
 if __name__ == "__main__":
