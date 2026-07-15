@@ -1,18 +1,18 @@
 {
-  "last_updated": "2026-07-15T13:03:44.220826+00:00",
+  "last_updated": "2026-07-15T13:18:47.317804+00:00",
   "overall": {
     "total_trades": 47,
-    "open_trades": 1,
-    "closed_trades": 46,
+    "open_trades": 0,
+    "closed_trades": 47,
     "winners": 17,
-    "losers": 29,
-    "win_rate": 37.0,
-    "total_pnl": 18.57,
+    "losers": 30,
+    "win_rate": 36.2,
+    "total_pnl": 17.18,
     "best_trade": 53.05,
     "worst_trade": -17.83,
     "average_win": 15.57,
-    "average_loss": -8.48,
-    "expectancy": 0.42,
+    "average_loss": -8.25,
+    "expectancy": 0.37,
     "max_drawdown": -119.56,
     "current_streak": 3
   },
@@ -32,11 +32,11 @@
       "pnl": 10.6
     },
     "COPPER": {
-      "trades": 12,
+      "trades": 13,
       "winners": 5,
-      "losers": 7,
-      "win_rate": 41.7,
-      "pnl": -7.85
+      "losers": 8,
+      "win_rate": 38.5,
+      "pnl": -9.24
     }
   }
 }
