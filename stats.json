@@ -1,8 +1,8 @@
 {
-  "last_updated": "2026-07-24T01:33:43.577458+00:00",
+  "last_updated": "2026-07-24T01:49:17.539719+00:00",
   "overall": {
-    "total_trades": 88,
-    "open_trades": 0,
+    "total_trades": 90,
+    "open_trades": 2,
     "closed_trades": 88,
     "winners": 29,
     "losers": 59,
