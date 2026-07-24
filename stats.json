@@ -1,28 +1,28 @@
 {
-  "last_updated": "2026-07-24T13:48:59.304433+00:00",
+  "last_updated": "2026-07-24T14:03:46.456067+00:00",
   "overall": {
-    "total_trades": 96,
+    "total_trades": 97,
     "open_trades": 2,
-    "closed_trades": 94,
-    "winners": 31,
+    "closed_trades": 95,
+    "winners": 32,
     "losers": 63,
-    "win_rate": 33.0,
-    "total_pnl": 18.17,
+    "win_rate": 33.7,
+    "total_pnl": 38.55,
     "best_trade": 53.05,
     "worst_trade": -17.83,
-    "average_win": 15.91,
+    "average_win": 16.05,
     "average_loss": -7.54,
-    "expectancy": 0.2,
+    "expectancy": 0.41,
     "max_drawdown": -119.56,
-    "current_streak": 2
+    "current_streak": 3
   },
   "by_epic": {
     "GOLD": {
-      "trades": 27,
-      "winners": 9,
+      "trades": 28,
+      "winners": 10,
       "losers": 18,
-      "win_rate": 33.3,
-      "pnl": 6.55
+      "win_rate": 35.7,
+      "pnl": 26.93
     },
     "SILVER": {
       "trades": 39,
