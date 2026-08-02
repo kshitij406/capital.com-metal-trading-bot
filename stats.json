@@ -1,35 +1,35 @@
 {
-  "last_updated": "2026-08-02T21:48:45.820793+00:00",
+  "last_updated": "2026-08-02T22:03:48.170452+00:00",
   "overall": {
     "total_trades": 135,
-    "open_trades": 2,
-    "closed_trades": 133,
-    "winners": 45,
+    "open_trades": 0,
+    "closed_trades": 135,
+    "winners": 47,
     "losers": 88,
-    "win_rate": 33.8,
-    "total_pnl": 51.8,
+    "win_rate": 34.8,
+    "total_pnl": 97.19,
     "best_trade": 53.05,
     "worst_trade": -17.83,
-    "average_win": 14.95,
+    "average_win": 15.28,
     "average_loss": -7.05,
-    "expectancy": 0.39,
+    "expectancy": 0.72,
     "max_drawdown": -119.56,
-    "current_streak": -1
+    "current_streak": 2
   },
   "by_epic": {
     "GOLD": {
-      "trades": 35,
-      "winners": 14,
+      "trades": 36,
+      "winners": 15,
       "losers": 21,
-      "win_rate": 40.0,
-      "pnl": 72.63
+      "win_rate": 41.7,
+      "pnl": 94.29
     },
     "SILVER": {
-      "trades": 51,
-      "winners": 17,
+      "trades": 52,
+      "winners": 18,
       "losers": 34,
-      "win_rate": 33.3,
-      "pnl": -0.36
+      "win_rate": 34.6,
+      "pnl": 23.37
     },
     "COPPER": {
       "trades": 47,
