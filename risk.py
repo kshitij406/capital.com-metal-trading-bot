@@ -11,10 +11,13 @@ MAX_NOTIONAL_MULT = 5.0  # cap exposure at 5x account balance. Expressed as noti
 MIN_ATR_PCT = 0.0005  # ATR must be at least 0.05% of entry_price - a fixed absolute
                       # floor doesn't work across instruments at very different price
                       # scales (e.g. GOLD ~4100 vs COPPER ~6.2), so this is expressed
-                      # relative to price. Combined with ABSOLUTE_MIN_ATR below so the
-                      # relative floor alone can't come out weaker than the old fixed
-                      # guard did for a cheap instrument like COPPER.
-ABSOLUTE_MIN_ATR = 0.01  # the original fixed floor; kept as a hard lower bound
+                      # relative to price instead. Deliberately relative-only, not
+                      # combined with an absolute floor: measured against the actual
+                      # 2.5yr ATR/price distribution for all three instruments, an
+                      # absolute 0.01 floor over-rejected 59% of COPPER's raw signals
+                      # while never binding on GOLD/SILVER at all - see the "Fix MIN_ATR
+                      # unit mismatch" commit for the verification (41%->100% COPPER
+                      # pass rate).
 
 
 # Volatility-managed sizing (Moreira & Muir 2017, "Volatility-Managed Portfolios").
@@ -55,7 +58,7 @@ def volatility_scalar(atr, baseline_atr, cap=VOL_TARGET_CAP, floor=VOL_TARGET_FL
 
 def calculate_trade(account_balance, entry_price, atr, direction, epic=None, quote_to_account_rate=1.0,
                     baseline_atr=None):
-    min_atr = max(entry_price * MIN_ATR_PCT, ABSOLUTE_MIN_ATR)
+    min_atr = entry_price * MIN_ATR_PCT
     if atr < min_atr:
         raise ValueError(f"ATR too small for safe position sizing: {atr} (min {min_atr:.6f})")
 
@@ -161,13 +164,17 @@ if __name__ == "__main__":
         assert r["size"] >= config.MIN_TRADE_SIZE[epic], f"{epic} below minimum"
     print("PASS: sizes respect per-instrument precision and minimums")
 
-    # COPPER's MIN_ATR floor must not regress below the old absolute 0.01 guard.
+    # Relative MIN_ATR floor: 6.2 * 0.0005 = 0.0031, so 0.001 must be rejected and
+    # 0.005 must pass (this is the fix that took COPPER's raw-signal pass rate from
+    # 41% to 100% - a flat absolute floor over-rejected COPPER specifically).
     try:
-        calculate_trade(1000, 6.2, 0.005, "LONG", epic="COPPER")
+        calculate_trade(1000, 6.2, 0.001, "LONG", epic="COPPER")
     except ValueError as e:
-        print(f"PASS: COPPER absolute ATR floor still enforced ({e.__class__.__name__})")
+        print(f"PASS: COPPER relative ATR floor still enforced ({e.__class__.__name__})")
     else:
-        raise AssertionError("expected ValueError for COPPER ATR below the absolute floor")
+        raise AssertionError("expected ValueError for COPPER ATR below the relative floor")
+    calculate_trade(1000, 6.2, 0.005, "LONG", epic="COPPER")
+    print("PASS: COPPER ATR above the relative floor is accepted (no over-rejection)")
 
     # Minimum-size guard: a balance too small for the instrument must raise, not
     # silently produce a zero-unit order.
