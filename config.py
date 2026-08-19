@@ -80,12 +80,12 @@ DB_PATH = "trades.db"
 
 DAILY_SUMMARY_HOUR_UTC = 21
 
-# Per-instrument precision and minimum trade size. Ported from the PR's OANDA
-# instrument spec as a starting point - verify against Capital.com's own
-# GET /api/v1/markets/{epic} response before relying on them for live sizing.
-INSTRUMENT_PRECISION = {"GOLD": 1, "SILVER": 0, "COPPER": 0}
-MIN_TRADE_SIZE = {"GOLD": 0.1, "SILVER": 1.0, "COPPER": 1.0}
-PRICE_PRECISION = {"GOLD": 3, "SILVER": 5, "COPPER": 5}
+# Per-instrument precision and minimum trade size, read directly from Capital.com's
+# GET /api/v1/markets/{epic} dealingRules (minSizeIncrement, minDealSize) on
+# 2026-08-19. Do not guess these from another broker's spec - COPPER's minDealSize
+# here (10) is 10x what an OANDA-derived guess would have used.
+INSTRUMENT_PRECISION = {"GOLD": 2, "SILVER": 1, "COPPER": 0}
+MIN_TRADE_SIZE = {"GOLD": 0.01, "SILVER": 1.0, "COPPER": 10.0}
 
 # Caps the balance the risk layer sees, so demo-account sizing (funded far above any
 # balance worth sizing against) resembles what a real account would take.

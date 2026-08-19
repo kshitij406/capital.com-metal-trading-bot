@@ -102,8 +102,10 @@ ALWAYS test new ideas on 10 years, not 4 - this one flipped sign between the two
 - Never use paid external data sources
 - The API identifier is the account email address, not a numeric ID
 - Account ID is fetched dynamically from GET /api/v1/accounts on session start
-- Gold accepts 0.1-unit sizes; silver and copper are integer-unit only
-  (config.INSTRUMENT_PRECISION - verify against Capital.com's own market limits)
+- Per-instrument size precision/minimums (config.INSTRUMENT_PRECISION,
+  config.MIN_TRADE_SIZE) are read from Capital.com's own GET /api/v1/markets/{epic}
+  dealingRules (checked 2026-08-19): GOLD 0.01 increment/min, SILVER 0.1/1.0,
+  COPPER 1-unit/10.0 min. Re-check if Capital.com changes these.
 - Practice balance may be funded far above a realistic account; BALANCE_CAP limits
   what the risk layer sees
 

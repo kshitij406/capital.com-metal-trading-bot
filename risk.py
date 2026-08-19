@@ -79,11 +79,8 @@ def calculate_trade(account_balance, entry_price, atr, direction, epic=None, quo
     max_size = ((account_balance / quote_to_account_rate) * MAX_NOTIONAL_MULT) / entry_price
     size = min(size, max_size)
 
-    # Round DOWN to the broker's unit precision for this instrument. Gold accepts
-    # tenths; silver and copper are integer-only, so a 2-decimal size would be rejected.
-    # NOTE: these per-instrument precision/minimum values (config.INSTRUMENT_PRECISION,
-    # config.MIN_TRADE_SIZE) were sourced from OANDA's instrument spec - verify against
-    # Capital.com's own GET /api/v1/markets/{epic} response before relying on them live.
+    # Round DOWN to the broker's unit precision for this instrument (Capital.com's
+    # own minSizeIncrement per epic - GOLD 0.01, SILVER 0.1, COPPER whole units).
     precision = config.INSTRUMENT_PRECISION.get(epic, 2)
     factor = 10 ** precision
     size = math.floor(size * factor) / factor
