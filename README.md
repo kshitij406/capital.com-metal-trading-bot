@@ -10,7 +10,8 @@ Gold/Silver/Copper CFD trading bot using the Capital.com REST API. Runs every 15
 - Long: EMA9 crosses above EMA21 and RSI in [40, 70]
 - Short: EMA9 crosses below EMA21 and RSI in [30, 60]
 - Stop loss: 1.5x ATR, take profit: 3x ATR
-- Risk per trade: 1% of account balance
+- Risk per trade: 1% of account balance, with exposure capped at 5x balance in notional
+  terms (`risk.MAX_NOTIONAL_MULT`) rather than a flat unit count
 - One open position per epic at a time
 
 ## Files
@@ -57,8 +58,8 @@ The workflow persists `trades.db` and `stats.json` back to the repo at the end o
 
 - **Stats**: `/profits`, `/status`, `/balance`, `/winstreak`, `/bestday`, `/worstday`, `/breakdown`, `/expectancy`, `/drawdown`, `/gold`, `/silver`, `/copper`, `/roast`
 - **Live price**: `/price <metal>` - live bid/ask/mid from the Capital.com API
-- **Control**: `/pause` and `/resume` - toggle a `PAUSED` file in the repo via the GitHub Contents API; `bot.py` checks for it at the start of each cycle and skips new entries while it exists (open positions are still managed by Capital.com's own SL/TP)
-- **Control**: `/forcecycle` - fires a `workflow_dispatch` against `bot.yml` to run a cycle immediately
+- **Control** (restricted to `DISCORD_OWNER_IDS`): `/pause` and `/resume` - toggle a `PAUSED` file in the repo via the GitHub Contents API; `bot.py` checks for it at the start of each cycle and skips new entries while it exists (open positions are still managed by Capital.com's own SL/TP)
+- **Control** (restricted to `DISCORD_OWNER_IDS`): `/forcecycle` - fires a `workflow_dispatch` against `bot.yml` to run a cycle immediately
 - `/help` - lists all commands
 
 Stats are read from `stats.json` via the raw GitHub content URL (`GITHUB_USERNAME`/`GITHUB_REPO`), not a live connection to the trading bot process.
@@ -69,3 +70,6 @@ The Discord bot needs a long-running process, unlike `bot.py` which runs as a sc
 
 - `DISCORD_BOT_TOKEN`
 - `GITHUB_USERNAME`, `GITHUB_REPO`, `GITHUB_ACCESS_TOKEN` (fine-grained PAT, Contents + Actions read/write - used for `/pause`, `/resume`, `/forcecycle`)
+- `DISCORD_OWNER_IDS` - comma-separated Discord user IDs permitted to run the control
+  commands (`/pause`, `/resume`, `/forcecycle`). Stats commands remain open to everyone.
+  If unset, control commands are refused for all users rather than left unrestricted.

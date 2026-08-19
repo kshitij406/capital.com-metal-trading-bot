@@ -2,6 +2,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
+import pandas as pd
 import requests
 
 import config
@@ -9,7 +10,7 @@ import logger
 import stats
 import strategy
 import risk
-from capital_api import CapitalAPI
+from oanda_api import OandaAPI
 
 DIRECTION_TO_API = {"LONG": "BUY", "SHORT": "SELL"}
 CLOSE_TOLERANCE = 0.5
@@ -91,16 +92,26 @@ def get_total_pnl():
 
 
 def determine_close_reason(close_price, entry_price, direction, stop_loss, take_profit):
-    if close_price == entry_price:
-        if take_profit is not None and abs(close_price - take_profit) <= CLOSE_TOLERANCE:
-            return "TP"
-        if stop_loss is not None and abs(close_price - stop_loss) <= CLOSE_TOLERANCE:
-            return "SL"
-        return "MANUAL"
+    """Classify by proximity to the actual SL/TP levels, not by which side of entry the
+    close landed on. The previous direction-only logic labelled every close as SL or TP
+    even when the position was closed manually or by the broker mid-range, so the
+    SL/TP split in trades.db was an assumption rather than a measurement. A close that
+    matches neither level within CLOSE_TOLERANCE is genuinely MANUAL."""
+    near_tp = take_profit is not None and abs(close_price - take_profit) <= CLOSE_TOLERANCE
+    near_sl = stop_loss is not None and abs(close_price - stop_loss) <= CLOSE_TOLERANCE
 
-    if direction == "LONG":
-        return "SL" if close_price < entry_price else "TP"
-    return "SL" if close_price > entry_price else "TP"
+    if near_tp and not near_sl:
+        return "TP"
+    if near_sl and not near_tp:
+        return "SL"
+    if near_sl and near_tp:
+        # Degenerate case: SL and TP within tolerance of each other. Fall back to which
+        # side of entry the close landed on, which is unambiguous for a real fill.
+        if direction == "LONG":
+            return "TP" if close_price > entry_price else "SL"
+        return "TP" if close_price < entry_price else "SL"
+
+    return "MANUAL"
 
 
 CLOSE_PRICE_MAX_DEVIATION = 0.10
@@ -216,6 +227,14 @@ def check_closed_trades(api, epic, positions, current_close_price):
         )
 
 
+def effective_balance(api):
+    """The practice account is funded far above any balance worth sizing against, so
+    cap what the risk layer sees. Without this, 1% risk on a 100k demo balance produces
+    positions nothing like the ones a real account would take, and the demo validates
+    numbers that never occur live."""
+    return min(api.get_balance(), config.BALANCE_CAP)
+
+
 def run_epic_cycle(api, epic):
     try:
         positions = api.get_open_positions()
@@ -223,6 +242,8 @@ def run_epic_cycle(api, epic):
         candles = api.get_candles(epic)
         df = strategy.candles_to_dataframe(candles)
         df = strategy.add_indicators(df)
+        if config.STRATEGY == "vol_regime":
+            df = strategy.add_volatility_regime(df)
         last = df.iloc[-1]
 
         check_closed_trades(api, epic, positions, last["close"])
@@ -231,19 +252,45 @@ def run_epic_cycle(api, epic):
             print(f"Position already open on {epic}, skipping cycle.")
             return
 
-        signal = strategy.generate_signal(df)
-        logger.log_signal(epic, last["ema20"], last["ema50"], last["rsi"], last["atr"], signal or "NONE")
+        # The forward-test rule returns a context describing every gate it applied, so
+        # a SKIP is recorded with its reason rather than vanishing. Verifying that live
+        # decisions match backtested ones is the whole point of the forward test, and
+        # that is impossible if only the trades are logged.
+        if config.STRATEGY == "vol_regime":
+            signal, ctx = strategy.generate_vol_regime_signal(df)
+        else:
+            signal, ctx = strategy.generate_signal(df), None
+
+        baseline_atr = None
+        if config.STRATEGY == "vol_regime" and config.VOL_MANAGED_SIZING:
+            b = last.get("baseline_atr")
+            baseline_atr = None if b is None or pd.isna(b) else float(b)
+        size_mult = risk.volatility_scalar(last["atr"], baseline_atr) if baseline_atr else None
+
+        logger.log_signal(epic, last["ema_fast"], last["ema_slow"], last["rsi"], last["atr"],
+                          signal or "NONE", context=ctx, size_multiplier=size_mult)
 
         if signal is None:
-            print(f"No signal this cycle for {epic}.")
+            reason = f" ({ctx['gate']})" if ctx else ""
+            print(f"No signal this cycle for {epic}{reason}.")
             return
 
         direction = "LONG" if signal == "BUY" else "SHORT"
-        balance = api.get_balance()
+        balance = effective_balance(api)
         entry_price = last["close"]
         atr = last["atr"]
 
-        trade = risk.calculate_trade(balance, entry_price, atr, direction)
+        # Account is CAD-denominated while metals are USD-quoted; risk sizing needs the
+        # rate to convert the budget into the instrument's currency.
+        rate = api.get_conversion_rate("USD", api.get_account_currency())
+
+        try:
+            trade = risk.calculate_trade(balance, entry_price, atr, direction, epic=epic,
+                                         quote_to_account_rate=rate,
+                                         baseline_atr=baseline_atr)
+        except ValueError as e:
+            print(f"Skipping {epic}: {e}")
+            return
 
         result = api.place_order(
             direction=DIRECTION_TO_API[direction],
@@ -253,6 +300,12 @@ def run_epic_cycle(api, epic):
             epic=epic,
         )
         confirmation = api.get_confirmation(result["dealReference"])
+        if confirmation.get("marketClosed") or result.get("rejectReason") == "MARKET_HALTED":
+            # Metals halt daily around 21:00-22:00 UTC and over the weekend. An hourly
+            # schedule will land in that window regularly; it is not an error worth
+            # alerting on, and no trade was placed.
+            print(f"Market halted for {epic}, no order placed this cycle.")
+            return
         if confirmation.get("dealStatus") != "ACCEPTED":
             raise RuntimeError(f"Order not accepted for {epic}: {confirmation}")
 
@@ -278,11 +331,15 @@ def run_epic_cycle(api, epic):
 
 
 def run_cycle():
+    # Credentials are optional at config import (so backtests run without them) but
+    # mandatory here - fail before any order can be attempted.
+    config.require_live_credentials()
+
     if is_paused():
         print("Bot is paused. Skipping cycle.")
         return
 
-    api = CapitalAPI()
+    api = OandaAPI()
 
     try:
         api.login()

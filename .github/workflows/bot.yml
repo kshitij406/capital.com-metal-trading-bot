@@ -2,6 +2,14 @@ name: Metals Trading Bot
 
 on:
   workflow_dispatch:
+  schedule:
+    # Every 15 minutes during 12:00-15:59 UTC, Monday-Friday. The forward-test
+    # strategy only trades US macro hours, and it decides on 15-minute bars, so an
+    # hourly schedule would see one bar in four and miss most qualifying setups -
+    # the test would measure the cron schedule rather than the strategy.
+    # GitHub's scheduler is best-effort and can run several minutes late under load;
+    # the bot is idempotent per bar, so a late or duplicated run is harmless.
+    - cron: "0,15,30,45 12-15 * * 1-5"
 
 permissions:
   contents: write
@@ -26,13 +34,14 @@ jobs:
       - name: Run bot
         run: python bot.py
         env:
-          CAPITAL_API_KEY: ${{ secrets.CAPITAL_API_KEY }}
-          CAPITAL_EMAIL: ${{ secrets.CAPITAL_EMAIL }}
-          CAPITAL_PASSWORD: ${{ secrets.CAPITAL_PASSWORD }}
-          CAPITAL_BASE_URL: ${{ secrets.CAPITAL_BASE_URL }}
-          CAPITAL_BASE_DEMO_URL: ${{ secrets.CAPITAL_BASE_DEMO_URL }}
+          OANDA_API_TOKEN: ${{ secrets.OANDA_API_TOKEN }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           IS_DEMO: ${{ secrets.IS_DEMO }}
+          BALANCE_CAP: ${{ vars.BALANCE_CAP }}
+          STRATEGY: ${{ vars.STRATEGY }}
+          VOL_MANAGED_SIZING: ${{ vars.VOL_MANAGED_SIZING }}
+          RISK_PER_TRADE: ${{ vars.RISK_PER_TRADE }}
+          VOL_REGIME_MIN: ${{ vars.VOL_REGIME_MIN }}
           GITHUB_USERNAME: kshitij406
           GITHUB_REPO: capital.com-metal-trading-bot
 

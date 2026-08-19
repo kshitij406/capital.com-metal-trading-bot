@@ -8,7 +8,7 @@ from discord import app_commands
 from dotenv import load_dotenv
 
 import config
-from capital_api import CapitalAPI
+from oanda_api import OandaAPI
 
 load_dotenv()
 
@@ -27,6 +27,30 @@ GITHUB_HEADERS = {
     "Accept": "application/vnd.github+json",
 }
 STARTING_BALANCE = 1000
+
+# Control commands (/pause, /resume, /forcecycle) can halt live trading or spend API
+# quota, so they are restricted to explicitly listed Discord user IDs. Comma-separated
+# in DISCORD_OWNER_IDS. If unset, control commands are refused outright rather than
+# left open to everyone in the server.
+DISCORD_OWNER_IDS = {
+    int(i) for i in os.environ.get("DISCORD_OWNER_IDS", "").replace(" ", "").split(",") if i
+}
+
+
+def is_owner(interaction: discord.Interaction) -> bool:
+    return interaction.user.id in DISCORD_OWNER_IDS
+
+
+async def deny_if_not_owner(interaction: discord.Interaction) -> bool:
+    """Returns True if the interaction was denied. Assumes the response is deferred."""
+    if is_owner(interaction):
+        return False
+    if not DISCORD_OWNER_IDS:
+        msg = "Control commands are disabled: DISCORD_OWNER_IDS is not configured."
+    else:
+        msg = "You are not authorised to use this command."
+    await interaction.followup.send(msg, ephemeral=True)
+    return True
 
 client = discord.Client(intents=discord.Intents.default())
 tree = app_commands.CommandTree(client)
@@ -257,7 +281,7 @@ async def price(interaction: discord.Interaction, metal: str):
         return
 
     try:
-        api = CapitalAPI()
+        api = OandaAPI()
         api.login()
         candle = api.get_candles(epic, max_candles=1)["prices"][-1]
         bid = candle["closePrice"]["bid"]
@@ -324,6 +348,8 @@ async def copper(interaction: discord.Interaction):
 @tree.command(name="pause", description="Pause the trading bot (no new entries)")
 async def pause(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
+    if await deny_if_not_owner(interaction):
+        return
     try:
         content = base64.b64encode(b"paused").decode()
         resp = requests.put(
@@ -351,6 +377,8 @@ async def pause(interaction: discord.Interaction):
 @tree.command(name="resume", description="Resume the trading bot")
 async def resume(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
+    if await deny_if_not_owner(interaction):
+        return
     try:
         get_resp = requests.get(f"{GITHUB_API_BASE}/contents/PAUSED", headers=GITHUB_HEADERS, timeout=10)
         if get_resp.status_code != 404:
@@ -374,6 +402,8 @@ async def resume(interaction: discord.Interaction):
 @tree.command(name="forcecycle", description="Manually trigger a bot cycle now")
 async def forcecycle(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
+    if await deny_if_not_owner(interaction):
+        return
     try:
         resp = requests.post(
             f"{GITHUB_API_BASE}/actions/workflows/bot.yml/dispatches",
