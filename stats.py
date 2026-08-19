@@ -23,15 +23,24 @@ def _epic_stats(rows):
 
 
 def update_stats():
+    # Trades logged before the `strategy` column existed are NULL there; treat those
+    # as "baseline" so historical trades stay counted under the strategy that was
+    # actually live at the time, rather than vanishing or blending into vol_regime.
+    strategy_filter = "(strategy = ? OR (strategy IS NULL AND ? = 'baseline'))"
+    params = (config.STRATEGY, config.STRATEGY)
+
     with sqlite3.connect(config.DB_PATH) as conn:
         opened_count = conn.execute(
-            "SELECT COUNT(*) FROM trades WHERE status IN ('OPENED', 'CLOSED')"
+            f"SELECT COUNT(*) FROM trades WHERE status IN ('OPENED', 'CLOSED') AND {strategy_filter}",
+            params,
         ).fetchone()[0]
         open_count = conn.execute(
-            "SELECT COUNT(*) FROM trades WHERE status = 'OPENED' AND close_price IS NULL"
+            f"SELECT COUNT(*) FROM trades WHERE status = 'OPENED' AND close_price IS NULL AND {strategy_filter}",
+            params,
         ).fetchone()[0]
         closed_rows = conn.execute(
-            "SELECT epic, pnl FROM trades WHERE close_price IS NOT NULL ORDER BY id ASC"
+            f"SELECT epic, pnl FROM trades WHERE close_price IS NOT NULL AND {strategy_filter} ORDER BY id ASC",
+            params,
         ).fetchall()
 
     closed_pnls = [pnl for _, pnl in closed_rows]
@@ -65,9 +74,12 @@ def update_stats():
         else:
             break
 
+    # Use the full epic list, not config.EPICS - that narrows to ["GOLD"] under
+    # vol_regime, which would silently drop SILVER/COPPER's baseline-strategy history
+    # from the per-epic breakdown.
     by_epic = {
         epic: _epic_stats([pnl for e, pnl in closed_rows if e == epic])
-        for epic in config.EPICS
+        for epic in config._ALL_EPICS
     }
 
     stats = {
