@@ -2,6 +2,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
+import pandas as pd
 import requests
 
 import config
@@ -91,19 +92,30 @@ def get_total_pnl():
 
 
 def determine_close_reason(close_price, entry_price, direction, stop_loss, take_profit):
-    if close_price == entry_price:
-        if take_profit is not None and abs(close_price - take_profit) <= CLOSE_TOLERANCE:
-            return "TP"
-        if stop_loss is not None and abs(close_price - stop_loss) <= CLOSE_TOLERANCE:
-            return "SL"
-        return "MANUAL"
+    """Classify by proximity to the actual SL/TP levels, not by which side of entry the
+    close landed on. Side-of-entry logic labelled every close as SL or TP even when the
+    position was closed manually or by the broker mid-range, so the SL/TP split in
+    trades.db was an assumption rather than a measurement. A close that matches neither
+    level within CLOSE_TOLERANCE is genuinely MANUAL."""
+    near_tp = take_profit is not None and abs(close_price - take_profit) <= CLOSE_TOLERANCE
+    near_sl = stop_loss is not None and abs(close_price - stop_loss) <= CLOSE_TOLERANCE
 
-    if direction == "LONG":
-        return "SL" if close_price < entry_price else "TP"
-    return "SL" if close_price > entry_price else "TP"
+    if near_tp and not near_sl:
+        return "TP"
+    if near_sl and not near_tp:
+        return "SL"
+    if near_sl and near_tp:
+        # Degenerate case: SL and TP within tolerance of each other. Fall back to which
+        # side of entry the close landed on, which is unambiguous for a real fill.
+        if direction == "LONG":
+            return "TP" if close_price > entry_price else "SL"
+        return "TP" if close_price < entry_price else "SL"
+
+    return "MANUAL"
 
 
 CLOSE_PRICE_MAX_DEVIATION = 0.10
+RECONCILIATION_TOLERANCE = 0.05
 
 
 def fetch_close_details(api, deal_id, direction, size, entry_price, fallback_price):
@@ -131,10 +143,48 @@ def fetch_close_details(api, deal_id, direction, size, entry_price, fallback_pri
     return round(close_price, 2), round(pnl, 2)
 
 
-def is_valid_close_price(close_price, entry_price):
-    if not close_price or close_price <= 0:
+def is_valid_price(candidate, reference):
+    if not candidate or candidate <= 0:
         return False
-    return abs(close_price - entry_price) / entry_price <= CLOSE_PRICE_MAX_DEVIATION
+    return abs(candidate - reference) / reference <= CLOSE_PRICE_MAX_DEVIATION
+
+
+def fetch_reported_pnl(api, deal_id):
+    """Cross-check our computed pnl against Capital.com's own realized-pnl figure for
+    the same deal, sourced from /history/transactions."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    try:
+        txs = api.get_transactions(f"{today}T00:00:00", f"{today}T23:59:59", tx_type="TRADE")
+    except Exception:
+        return None
+    for tx in txs:
+        if tx.get("dealId") == deal_id and tx.get("note") == "Trade closed":
+            try:
+                return float(tx["size"])
+            except (KeyError, ValueError, TypeError):
+                return None
+    return None
+
+
+def resolve_opened_position(api, epic, estimated_entry_price):
+    """Look the freshly opened position up directly from /positions rather than
+    trusting the confirms endpoint's dealId, so deal_id and entry_price both reflect
+    the real fill (and so a transient confirmation-read glitch on an order that
+    actually filled can still be reconciled instead of logged as an error)."""
+    for p in api.get_open_positions():
+        if p["market"]["epic"] == epic:
+            level = p["position"]["level"]
+            if is_valid_price(level, estimated_entry_price):
+                return p["position"]["dealId"], level
+            print(f"WARNING: live fill level {level} for {epic} deviates >10% from estimate {estimated_entry_price}, discarding.")
+            break
+    return None, None
+
+
+def effective_balance(api):
+    """Caps the balance the risk layer sees, so demo-account sizing (funded far above
+    any balance worth sizing against) resembles what a real account would take."""
+    return min(api.get_balance(), config.BALANCE_CAP)
 
 
 def check_closed_trades(api, epic, positions, current_close_price):
@@ -153,13 +203,18 @@ def check_closed_trades(api, epic, positions, current_close_price):
 
         close_price, pnl = fetch_close_details(api, deal_id, direction, size, entry_price, current_close_price)
 
-        if not is_valid_close_price(close_price, entry_price):
+        if not is_valid_price(close_price, entry_price):
             print(f"WARNING: skipping close for {epic} deal {deal_id}, invalid close_price={close_price} (entry={entry_price})")
             continue
 
         close_reason = determine_close_reason(close_price, entry_price, direction, stop_loss, take_profit)
 
         logger.update_trade_status(deal_id, "CLOSED", close_price=close_price, pnl=pnl, close_reason=close_reason)
+
+        reported_pnl = fetch_reported_pnl(api, deal_id)
+        if reported_pnl is not None and abs(pnl - reported_pnl) > RECONCILIATION_TOLERANCE:
+            print(f"WARNING: PnL reconciliation mismatch for {epic} deal {deal_id}: "
+                  f"bot={pnl} capital.com={reported_pnl} diff={round(pnl - reported_pnl, 2)}")
 
         running_total = get_total_pnl()
         balance = api.get_balance()
@@ -179,6 +234,8 @@ def run_epic_cycle(api, epic):
         candles = api.get_candles(epic)
         df = strategy.candles_to_dataframe(candles)
         df = strategy.add_indicators(df)
+        if config.STRATEGY == "vol_regime":
+            df = strategy.add_volatility_regime(df)
         last = df.iloc[-1]
 
         check_closed_trades(api, epic, positions, last["close"])
@@ -187,19 +244,39 @@ def run_epic_cycle(api, epic):
             print(f"Position already open on {epic}, skipping cycle.")
             return
 
-        signal = strategy.generate_signal(df)
-        logger.log_signal(epic, last["ema20"], last["ema50"], last["rsi"], last["atr"], signal or "NONE")
+        # The vol_regime rule returns a context describing every gate it applied, so a
+        # SKIP is recorded with its reason rather than vanishing - verifying that live
+        # decisions match backtested ones is the point of the forward test.
+        if config.STRATEGY == "vol_regime":
+            signal, ctx = strategy.generate_vol_regime_signal(df)
+        else:
+            signal, ctx = strategy.generate_signal(df), None
+
+        baseline_atr = None
+        if config.STRATEGY == "vol_regime" and config.VOL_MANAGED_SIZING:
+            b = last.get("baseline_atr")
+            baseline_atr = None if b is None or pd.isna(b) else float(b)
+        size_mult = risk.volatility_scalar(last["atr"], baseline_atr) if baseline_atr else None
+
+        logger.log_signal(epic, last["ema_fast"], last["ema_slow"], last["rsi"], last["atr"],
+                          signal or "NONE", context=ctx, size_multiplier=size_mult)
 
         if signal is None:
-            print(f"No signal this cycle for {epic}.")
+            reason = f" ({ctx['gate']})" if ctx else ""
+            print(f"No signal this cycle for {epic}{reason}.")
             return
 
         direction = "LONG" if signal == "BUY" else "SHORT"
-        balance = api.get_balance()
+        balance = effective_balance(api)
         entry_price = last["close"]
         atr = last["atr"]
 
-        trade = risk.calculate_trade(balance, entry_price, atr, direction)
+        try:
+            trade = risk.calculate_trade(balance, entry_price, atr, direction, epic=epic,
+                                         baseline_atr=baseline_atr)
+        except ValueError as e:
+            print(f"Skipping {epic}: {e}")
+            return
 
         result = api.place_order(
             direction=DIRECTION_TO_API[direction],
@@ -209,7 +286,21 @@ def run_epic_cycle(api, epic):
             epic=epic,
         )
         confirmation = api.get_confirmation(result["dealReference"])
-        deal_id = confirmation.get("dealId", result.get("dealReference"))
+
+        # Always check /positions directly rather than trusting the confirms endpoint
+        # alone - it disambiguates the real fill price/deal_id even on ACCEPTED, and on
+        # a non-ACCEPTED status it catches a confirms-read glitch on an order that
+        # actually filled, instead of raising immediately and leaving a filled,
+        # stop-protected position untracked.
+        resolved_deal_id, resolved_entry_price = resolve_opened_position(api, epic, entry_price)
+        if resolved_deal_id:
+            deal_id, entry_price = resolved_deal_id, resolved_entry_price
+        elif confirmation.get("dealStatus") != "ACCEPTED":
+            raise RuntimeError(f"Order not accepted for {epic}: {confirmation}")
+        else:
+            deal_id = confirmation.get("dealId", result.get("dealReference"))
+            print(f"WARNING: could not confirm live position for {epic} after order placement; "
+                  f"logging estimated entry_price and order-level deal_id as a fallback.")
 
         logger.log_trade(
             epic, direction, trade["size"], entry_price,

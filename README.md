@@ -23,6 +23,17 @@ Gold/Silver/Copper CFD trading bot using the Capital.com REST API. Runs every 15
 - `stats.py` - recalculates `stats.json` from `trades.db` after every cycle
 - `bot.py` - wires everything together, main entry point
 - `discord_bot.py` - Discord slash-command bot for stats/control (see below)
+- `data.py`, `features.py`, `base_signals.py`, `signals.py`, `metrics.py`,
+  `backtest.py`, `forward_test.py`, `compare.py` - backtest/forward-test tooling,
+  never imported by `bot.py`. See CLAUDE.md for the research findings and results.
+
+## Strategy selection
+
+Set `STRATEGY=vol_regime` (repo variable, or in `.env`) to switch from the baseline
+EMA-cross rule to the volatility-regime-gated variant backtested in CLAUDE.md. Leaving
+it unset keeps the original baseline behaviour on all three metals - that's the revert
+path. `VOL_REGIME_MIN`, `VOL_MANAGED_SIZING`, `RISK_PER_TRADE`, `BALANCE_CAP` tune it
+further; see `.env.example`.
 
 ## Setup
 
@@ -69,3 +80,4 @@ The Discord bot needs a long-running process, unlike `bot.py` which runs as a sc
 
 - `DISCORD_BOT_TOKEN`
 - `GITHUB_USERNAME`, `GITHUB_REPO`, `GITHUB_ACCESS_TOKEN` (fine-grained PAT, Contents + Actions read/write - used for `/pause`, `/resume`, `/forcecycle`)
+- `DISCORD_OWNER_IDS` - comma-separated Discord user IDs allowed to run `/pause`, `/resume`, `/forcecycle`. Unset refuses those commands for everyone.

@@ -36,6 +36,7 @@ def init_db():
             """)
             conn.commit()
         update_trades_table()
+        update_signals_table()
         return True
     except Exception as e:
         print(f"init_db error: {e}")
@@ -46,7 +47,8 @@ def update_trades_table():
     try:
         with sqlite3.connect(config.DB_PATH) as conn:
             existing = {row[1] for row in conn.execute("PRAGMA table_info(trades)")}
-            for column, col_type in (("close_price", "REAL"), ("pnl", "REAL"), ("close_reason", "TEXT")):
+            for column, col_type in (("close_price", "REAL"), ("pnl", "REAL"),
+                                     ("close_reason", "TEXT"), ("strategy", "TEXT")):
                 if column not in existing:
                     conn.execute(f"ALTER TABLE trades ADD COLUMN {column} {col_type}")
             conn.commit()
@@ -56,13 +58,45 @@ def update_trades_table():
         return False
 
 
-def log_signal(epic, ema20, ema50, rsi, atr, signal):
+def update_signals_table():
+    """Add the forward-test decision columns to the signals table.
+
+    Additive migration, matching update_trades_table: existing rows keep NULL in the
+    new columns rather than being rewritten, so pre-existing history stays intact.
+    """
     try:
         with sqlite3.connect(config.DB_PATH) as conn:
+            existing = {row[1] for row in conn.execute("PRAGMA table_info(signals)")}
+            for column, col_type in (
+                ("strategy", "TEXT"),
+                ("vol_regime", "REAL"),
+                ("hour_utc", "INTEGER"),
+                ("gate", "TEXT"),
+                ("base_signal", "TEXT"),
+                ("size_multiplier", "REAL"),
+            ):
+                if column not in existing:
+                    conn.execute(f"ALTER TABLE signals ADD COLUMN {column} {col_type}")
+            conn.commit()
+        return True
+    except Exception as e:
+        print(f"update_signals_table error: {e}")
+        return False
+
+
+def log_signal(epic, ema_fast, ema_slow, rsi, atr, signal, context=None, size_multiplier=None):
+    """The ema20/ema50 DB columns are legacy names retained for schema compatibility
+    with existing rows - they hold config.EMA_FAST (9) and config.EMA_SLOW (21)."""
+    try:
+        with sqlite3.connect(config.DB_PATH) as conn:
+            ctx = context or {}
             conn.execute(
-                "INSERT INTO signals (timestamp, epic, ema20, ema50, rsi, atr, signal_generated) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (datetime.now(timezone.utc).isoformat(), epic, ema20, ema50, rsi, atr, signal),
+                "INSERT INTO signals (timestamp, epic, ema20, ema50, rsi, atr, signal_generated, "
+                "strategy, vol_regime, hour_utc, gate, base_signal, size_multiplier) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (datetime.now(timezone.utc).isoformat(), epic, ema_fast, ema_slow, rsi, atr, signal,
+                 config.STRATEGY, ctx.get("vol_regime"), ctx.get("hour_utc"), ctx.get("gate"),
+                 ctx.get("base_signal"), size_multiplier),
             )
             conn.commit()
         return True
@@ -76,9 +110,10 @@ def log_trade(epic, direction, size, entry_price, stop_loss, take_profit, status
         with sqlite3.connect(config.DB_PATH) as conn:
             conn.execute(
                 "INSERT INTO trades (timestamp, epic, direction, size, entry_price, stop_loss, "
-                "take_profit, status, deal_id, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "take_profit, status, deal_id, error, strategy) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (datetime.now(timezone.utc).isoformat(), epic, direction, size, entry_price, stop_loss,
-                 take_profit, status, deal_id, error),
+                 take_profit, status, deal_id, error, config.STRATEGY),
             )
             conn.commit()
         return True

@@ -33,6 +33,11 @@ jobs:
           CAPITAL_BASE_DEMO_URL: ${{ secrets.CAPITAL_BASE_DEMO_URL }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           IS_DEMO: ${{ secrets.IS_DEMO }}
+          BALANCE_CAP: ${{ vars.BALANCE_CAP }}
+          STRATEGY: ${{ vars.STRATEGY }}
+          VOL_MANAGED_SIZING: ${{ vars.VOL_MANAGED_SIZING }}
+          RISK_PER_TRADE: ${{ vars.RISK_PER_TRADE }}
+          VOL_REGIME_MIN: ${{ vars.VOL_REGIME_MIN }}
           GITHUB_USERNAME: kshitij406
           GITHUB_REPO: capital.com-metal-trading-bot
 
